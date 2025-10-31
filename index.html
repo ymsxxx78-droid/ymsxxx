@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>수능 영어단어 트레이너 – 이윤서 집중모드</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#0b0f1a; --card:#121826; --ink:#e7ecf5; --muted:#9fb0d1;
+    --acc:#5ee8a5; --warn:#ffb020; --bad:#ff6b6b; --ok:#7ed957;
+  }
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,Segoe UI,Apple SD Gothic Neo,Malgun Gothic,Arial,sans-serif;}
+  .wrap{max-width:980px;margin:0 auto;padding:28px}
+  .hero{display:flex;justify-content:space-between;gap:16px;align-items:center}
+  h1{font-size:28px;margin:0 0 8px}
+  .tag{display:inline-block;background:linear-gradient(90deg,#3b82f6, #06b6d4);padding:4px 10px;border-radius:999px;font-size:12px}
+  .card{background:var(--card);border:1px solid #1f2a44;border-radius:16px;padding:18px}
+  .grid{display:grid;gap:16px}
+  .grid.cols-2{grid-template-columns:1.1fr .9fr}
+  label{font-size:13px;color:var(--muted)}
+  input[type="file"]{background:#0f1423;border:1px dashed #2b3a60;border-radius:10px;padding:12px;width:100%;color:var(--muted)}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .btn{cursor:pointer;background:#1e2a45;border:1px solid #2b3a60;color:var(--ink);padding:10px 14px;border-radius:10px;font-weight:700}
+  .btn.primary{background:linear-gradient(180deg,#2563eb,#1d4ed8);border:none}
+  .btn.ghost{background:transparent;border:1px solid #2b3a60}
+  .btn.warn{background:#3a2a00;border:1px solid #7a5b00;color:#ffd88a}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .mode-tabs{display:flex;gap:8px;margin-top:8px}
+  .tab{flex:1;text-align:center;padding:10px;border-radius:10px;border:1px solid #2b3a60;background:#0f1423;cursor:pointer}
+  .tab.active{background:#193055;border-color:#3a60b6}
+  .panel{margin-top:14px}
+  .center{display:grid;place-items:center}
+  .big{font-size:26px;letter-spacing:.5px;font-weight:800}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  .word{font-size:40px;font-weight:900;letter-spacing:2px}
+  .hint{color:var(--muted);font-size:14px;margin-top:6px}
+  .in{width:100%;padding:14px 12px;background:#0f1423;border:1px solid #2b3a60;border-radius:12px;color:var(--ink);font-size:16px}
+  .result{margin-top:10px;font-weight:700}
+  .ok{color:var(--ok)} .bad{color:var(--bad)}
+  .muted{color:var(--muted)}
+  .kbd{display:inline-block;border:1px solid #2b3a60;border-bottom-width:2px;border-radius:6px;padding:2px 6px;background:#0f1423}
+  .timer{height:10px;background:#12213d;border-radius:999px;overflow:hidden;border:1px solid #27406d}
+  .bar{height:100%;width:0;background:linear-gradient(90deg,#34d399,#22c55e)}
+  .stat{display:flex;gap:12px;flex-wrap:wrap}
+  .pill{padding:6px 10px;border-radius:999px;background:#0f1423;border:1px solid #2b3a60;font-size:13px}
+  .tight{margin-top:6px}
+  .footer{margin-top:20px;color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hero">
+      <div>
+        <div class="tag">이윤서 집중 트레이닝</div>
+        <h1>수능 영어단어 훈련·테스트</h1>
+        <div class="muted">엑셀 업로드 → 모드 선택 → 뜻 입력 후 <span class="kbd">Enter</span> → <b>자동다음</b>. 채점은 “의미 유사도”로 느슨하게.</div>
+      </div>
+      <div class="center">
+        <button id="btnReset" class="btn ghost">진행 초기화</button>
+      </div>
+    </div>
+
+    <div class="grid cols-2" style="margin-top:16px">
+      <div class="card">
+        <div class="grid">
+          <div>
+            <label for="file">단어세트 업로드 (.xlsx / 1열=영어, 2열=한글뜻)</label>
+            <input id="file" type="file" accept=".xlsx,.xls" />
+            <div class="tight muted">※ 업로드된 목록은 화면에 표시하지 않습니다. 메모리 내에서만 사용합니다.</div>
+          </div>
+          <div class="mode-tabs">
+            <div id="tabTrain" class="tab active">① 단어훈련</div>
+            <div id="tabTest" class="tab">② 단어테스트 (10초)</div>
+          </div>
+        </div>
+
+        <!-- 단어훈련: '원래 영어단어'로 표시 -->
+        <div id="panelTrain" class="panel">
+          <div class="card" style="background:#0f1423;border-radius:14px">
+            <div class="muted">영어단어</div>
+            <div id="trainWord" class="word mono">—</div>
+            <button id="btnHint" class="btn tight">힌트 보기</button>
+            <div id="trainHint" class="hint" style="display:none">힌트: <span id="trainHintText"></span></div>
+
+            <div style="margin-top:14px">
+              <label>한글뜻 입력</label>
+              <input id="trainInput" class="in" placeholder="뜻을 입력하고 Enter" autocomplete="off" />
+              <div class="row tight">
+                <button id="btnTrainCheck" class="btn primary">확인 후 다음</button>
+                <div id="trainResult" class="result"></div>
+              </div>
+            </div>
+
+            <div class="stat tight">
+              <div class="pill">진행: <span id="trainIdx">0</span>/<span id="total">0</span></div>
+              <div class="pill">정답: <span id="correctTrain">0</span></div>
+              <div class="pill">오답: <span id="wrongTrain">0</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 단어테스트 -->
+        <div id="panelTest" class="panel" style="display:none">
+          <div class="card" style="background:#0f1423;border-radius:14px">
+            <div class="row" style="align-items:flex-end;justify-content:space-between">
+              <div>
+                <div class="muted">영어단어</div>
+                <div id="testWord" class="big mono">—</div>
+              </div>
+              <div style="min-width:200px">
+                <div class="muted" style="text-align:right">타이머 (10초)</div>
+                <div class="timer"><div id="bar" class="bar"></div></div>
+              </div>
+            </div>
+
+            <div style="margin-top:14px">
+              <label>한글뜻 입력</label>
+              <input id="testInput" class="in" placeholder="뜻을 입력하고 Enter" autocomplete="off" />
+              <div class="row tight">
+                <button id="btnTestCheck" class="btn primary">확인 후 다음</button>
+                <div id="testResult" class="result"></div>
+              </div>
+            </div>
+
+            <div class="stat tight">
+              <div class="pill">진행: <span id="testIdx">0</span>/<span id="total2">0</span></div>
+              <div class="pill">정답: <span id="correctTest">0</span></div>
+              <div class="pill">오답: <span id="wrongTest">0</span></div>
+              <div class="pill">점수: <span id="score">0</span>점</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 운영 가이드(우측 패널) -->
+      <div class="card">
+        <div class="big" style="margin-bottom:8px">운영 가이드 – 이윤서 전용</div>
+        <ul class="muted">
+          <li><b>업로드</b>: 엑셀 첫 칸 영어, 둘째 칸 한글뜻 (예: <span class="mono">apple | 사과</span>).</li>
+          <li><b>단어훈련</b>: 영어단어 원형 표시 → 힌트(뜻) 확인 → 뜻 입력 → <b>확인 시 자동다음</b>.</li>
+          <li><b>단어테스트</b>: 10초 제한, 영어단어 제시 → 뜻 입력 → <b>느슨한 의미 매칭</b>으로 채점.</li>
+          <li>채점 기준: 철자·공백 무시, 자모·특수문자 제거, <b>유사도 ≥ 0.62</b> 또는 핵심어 포함 시 정답 처리.</li>
+          <li>원본 리스트는 화면에 노출하지 않습니다.</li>
+        </ul>
+        <div class="footer">
+          오늘 목표: <b>전 단어 1회전</b>. <b>이윤서</b>, 지금이 바로 집중할 시간.
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ====== 상태 ====== */
+let items = []; // [{en, ko}]
+let orderTrain = [];
+let orderTest = [];
+let iTrain = 0, iTest = 0;
+let correctTrain = 0, wrongTrain = 0;
+let correctTest = 0, wrongTest = 0;
+let timer = null, tRemain = 10, tTotal = 10;
+
+/* ====== 유틸 ====== */
+const el = id => document.getElementById(id);
+
+function shuffle(arr){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]]=[a[j],a[i]];
+  }
+  return a;
+}
+
+// 한글 정규화
+function normKo(s){
+  return (s||'')
+    .toLowerCase()
+    .replace(/[~!@#%^&*()_\-+={}\[\]|\\:;"'<>,.?/]/g,'')
+    .replace(/\s+/g,'')
+    .replace(/[0-9a-z]/g,''); // 숫자/영문 제거
+}
+
+// 토큰 기반 포함 체크(핵심어 2글자 이상)
+function tokenHit(user, truth){
+  const u = (user||'').trim().split(/\s+/).filter(x=>x.length>=2);
+  const t = (truth||'').trim();
+  if(!u.length) return false;
+  return u.some(tok => t.includes(tok));
+}
+
+// 레벤슈타인 유사도
+function lev(a,b){
+  const m=a.length, n=b.length;
+  if(m===0&&n===0) return 1;
+  const dp = Array.from({length:m+1},()=>Array(n+1).fill(0));
+  for(let i=0;i<=m;i++) dp[i][0]=i;
+  for(let j=0;j<=n;j++) dp[0][j]=j;
+  for(let i=1;i<=m;i++){
+    for(let j=1;j<=n;j++){
+      const cost = a[i-1]===b[j-1]?0:1;
+      dp[i][j]=Math.min(
+        dp[i-1][j]+1,
+        dp[i][j-1]+1,
+        dp[i-1][j-1]+cost
+      );
+    }
+  }
+  const dist = dp[m][n];
+  const maxLen = Math.max(m,n) || 1;
+  return 1 - dist/maxLen;
+}
+
+function isCorrect(user, truth){
+  const u = normKo(user);
+  const t = normKo(truth);
+  if(!u || !t) return false;
+  const sim = lev(u,t);
+  if(sim >= 0.62) return true;
+  // 보조 규칙: 원문 토큰 포함(공백 기준)
+  return tokenHit(user, truth);
+}
+
+function updateCounters(){
+  el('trainIdx').textContent = Math.min(iTrain, items.length);
+  el('testIdx').textContent = Math.min(iTest, items.length);
+  el('total').textContent = items.length;
+  el('total2').textContent = items.length;
+  el('correctTrain').textContent = correctTrain;
+  el('wrongTrain').textContent = wrongTrain;
+  el('correctTest').textContent = correctTest;
+  el('wrongTest').textContent = wrongTest;
+  const totalT = correctTest + wrongTest;
+  el('score').textContent = totalT ? Math.round(100*correctTest/totalT) : 0;
+}
+
+/* ====== 파일 로드 ====== */
+el('file').addEventListener('change', async (e)=>{
+  resetAll();
+  const file = e.target.files[0];
+  if(!file) return;
+  const data = await file.arrayBuffer();
+  const wb = XLSX.read(data);
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:false});
+  // 첫 행부터 [영어, 한글뜻]
+  items = [];
+  for(const r of rows){
+    if(!r || r.length<2) continue;
+    const en = (r[0]||'').toString().trim();
+    const ko = (r[1]||'').toString().trim();
+    if(en && ko) items.push({en, ko});
+  }
+  orderTrain = shuffle([...Array(items.length).keys()]);
+  orderTest = shuffle([...Array(items.length).keys()]);
+  iTrain = 0; iTest = 0;
+  correctTrain = wrongTrain = correctTest = wrongTest = 0;
+  updateCounters();
+  loadTrainCard();
+  loadTestCard(true);
+});
+
+/* ====== 모드 전환 ====== */
+function setTab(mode){
+  const train = mode==='train';
+  el('tabTrain').classList.toggle('active', train);
+  el('tabTest').classList.toggle('active', !train);
+  el('panelTrain').style.display = train ? '' : 'none';
+  el('panelTest').style.display = train ? 'none' : '';
+}
+el('tabTrain').onclick = ()=> setTab('train');
+el('tabTest').onclick = ()=> setTab('test');
+
+/* ====== 단어훈련 (영어 원형 표시) ====== */
+function loadTrainCard(){
+  if(!items.length){ el('trainWord').textContent='—'; return; }
+  if(iTrain >= items.length){
+    // 1회전 끝 → 섞어서 재시작
+    orderTrain = shuffle([...Array(items.length).keys()]);
+    iTrain = 0;
+  }
+  const idx = orderTrain[iTrain];
+  const {en, ko} = items[idx];
+  el('trainWord').textContent = en;           // ★ 원래 영어단어 표시
+  el('trainHint').style.display='none';
+  el('trainHintText').textContent = ko;
+  el('trainInput').value='';
+  el('trainInput').focus();
+  el('trainResult').textContent='';
+  updateCounters();
+}
+
+el('btnHint').addEventListener('click', ()=>{
+  el('trainHint').style.display='';
+});
+
+function trainCheckAndNext(){
+  if(!items.length) return;
+  const idx = orderTrain[iTrain];
+  const truth = items[idx].ko;
+  const user = el('trainInput').value;
+  const ok = isCorrect(user, truth);
+  if(ok){
+    correctTrain++;
+    el('trainResult').innerHTML = '<span class="ok">정답</span>';
+  }else{
+    wrongTrain++;
+    el('trainResult').innerHTML = '<span class="bad">오답</span> <span class="muted">(정: '+truth+')</span>';
+  }
+  iTrain++;
+  updateCounters();
+  setTimeout(loadTrainCard, 650);
+}
+el('btnTrainCheck').onclick = trainCheckAndNext;
+el('trainInput').addEventListener('keydown', (e)=>{
+  if(e.key==='Enter'){ trainCheckAndNext(); }
+});
+
+/* ====== 단어테스트 (10초 타이머) ====== */
+function clearTimer(){
+  if(timer){ clearInterval(timer); timer=null; }
+}
+function startTimer(){
+  clearTimer();
+  tRemain = tTotal;
+  el('bar').style.width='100%';
+  timer = setInterval(()=>{
+    tRemain -= 0.05; // 50ms tick
+    const pct = Math.max(0, Math.min(1, tRemain/tTotal));
+    el('bar').style.width = (pct*100)+'%';
+    if(tRemain<=0){
+      clearTimer();
+      // 시간초과 → 오답 처리 후 자동다음
+      testCheckAndNext(true);
+    }
+  }, 50);
+}
+
+function loadTestCard(fresh=false){
+  if(!items.length){ el('testWord').textContent='—'; return; }
+  if(iTest >= items.length){
+    // 1회전 끝 → 섞어서 재시작
+    orderTest = shuffle([...Array(items.length).keys()]);
+    iTest = 0;
+  }
+  const idx = orderTest[iTest];
+  const {en} = items[idx];
+  el('testWord').textContent = en;
+  el('testInput').value='';
+  el('testInput').focus();
+  el('testResult').textContent='';
+  updateCounters();
+  if(!fresh){ clearTimer(); }
+  startTimer();
+}
+
+function testCheckAndNext(timeout=false){
+  if(!items.length) return;
+  const idx = orderTest[iTest];
+  const truth = items[idx].ko;
+  const user = el('testInput').value;
+  let ok = false;
+  if(timeout){
+    ok = false;
+  }else{
+    ok = isCorrect(user, truth);
+  }
+
+  if(ok){
+    correctTest++;
+    el('testResult').innerHTML = '<span class="ok">정답</span>';
+  }else{
+    wrongTest++;
+    el('testResult').innerHTML = '<span class="bad">오답</span> <span class="muted">(정: '+truth+')</span>';
+  }
+
+  iTest++;
+  updateCounters();
+  clearTimer();
+  setTimeout(()=>{ loadTestCard(); }, 650);
+}
+
+el('btnTestCheck').onclick = ()=> testCheckAndNext(false);
+el('testInput').addEventListener('keydown',(e)=>{
+  if(e.key==='Enter'){ testCheckAndNext(false); }
+});
+
+/* ====== 초기화 ====== */
+function resetAll(){
+  clearTimer();
+  items = [];
+  orderTrain = []; orderTest=[];
+  iTrain=iTest=0;
+  correctTrain=wrongTrain=correctTest=wrongTest=0;
+  el('trainWord').textContent='—';
+  el('trainHint').style.display='none';
+  el('trainHintText').textContent='';
+  el('trainInput').value='';
+  el('trainResult').textContent='';
+  el('testWord').textContent='—';
+  el('testInput').value='';
+  el('testResult').textContent='';
+  el('bar').style.width='0';
+  updateCounters();
+}
+el('btnReset').onclick = resetAll;
+
+/* 시작 상태 */
+updateCounters();
+</script>
+</body>
+</html>
