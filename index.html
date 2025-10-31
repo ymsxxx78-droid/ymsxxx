@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>윤서 전용 단어 훈련 & 테스트 (v2)</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root{--bg:#0d1321;--fg:#eef0f4;--accent:#ff7a00;--muted:#9aa3b2;--card:#121a2b;--ok:#34c759;--err:#ff453a}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Pretendard,Apple SD Gothic Neo,Noto Sans KR,sans-serif}
+    .wrap{max-width:980px;margin:0 auto;padding:24px}
+    header{display:flex;gap:16px;align-items:center;justify-content:space-between}
+    h1{font-size:28px;margin:0}
+    .tag{background:var(--accent);color:#101014;padding:4px 10px;border-radius:999px;font-weight:700}
+    .sub{color:var(--muted);margin-top:4px}
+    .panel{background:var(--card);border:1px solid #1e2a44;border-radius:16px;padding:18px}
+    .grid{display:grid;grid-template-columns:1.2fr .8fr;gap:16px}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    input[type=file]{background:#0b1220;border:1px dashed #314060;padding:10px;border-radius:10px;color:var(--fg)}
+    button{background:var(--accent);border:none;color:#111;padding:10px 14px;border-radius:12px;font-weight:800;cursor:pointer}
+    button.ghost{background:#1b263f;color:var(--fg);border:1px solid #314060}
+    button.secondary{background:#26324e;color:var(--fg)}
+    button:disabled{opacity:.6;cursor:not-allowed}
+    .tabs{display:flex;gap:8px;margin-top:12px}
+    .tab{background:#16213a;border:1px solid #2a3a61;padding:10px 14px;border-radius:12px;cursor:pointer}
+    .tab.active{background:var(--accent);color:#111;border-color:transparent;font-weight:900}
+    .card{background:#0f172a;border:1px solid #1e293b;border-radius:16px;padding:20px;min-height:240px;display:flex;flex-direction:column;gap:12px;justify-content:center;align-items:center;text-align:center}
+    .word{font-size:32px;font-weight:900}
+    .meaning{font-size:22px;color:#cfd6e6}
+    .muted{color:var(--muted)}
+    .progress{height:10px;background:#0b1220;border:1px solid #1f2b47;border-radius:999px;overflow:hidden}
+    .progress>span{display:block;height:100%;background:var(--accent);width:0}
+    table{width:100%;border-collapse:collapse}
+    th,td{border-bottom:1px solid #24324f;padding:8px;text-align:left}
+    th{color:#b7c1d9}
+    .timer{font-variant-numeric:tabular-nums;font-size:18px}
+    .pill{border-radius:999px;padding:2px 10px;font-weight:800}
+    .pill.ok{background:rgba(52,199,89,.15);color:var(--ok);border:1px solid rgba(52,199,89,.35)}
+    .pill.err{background:rgba(255,69,58,.1);color:var(--err);border:1px solid rgba(255,69,58,.35)}
+    .footer{color:#90a0be;font-size:12px;margin-top:14px}
+    .txt{width:80%;padding:12px;border-radius:10px;border:1px solid #223256;background:#0b1220;color:#fff}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>윤서 전용 단어 훈련 & 테스트</h1>
+        <div class="sub">“<strong>이윤서</strong>, 지금 외우자. 오늘의 집중은 내일의 여유!”</div>
+      </div>
+      <div class="tag">수능 영어</div>
+    </header>
+
+    <section class="panel" style="margin-top:16px">
+      <div class="row"><label for="file">엑셀/CSV 업로드 (1열: 영어단어, 2열: 한글뜻)</label></div>
+      <div class="row">
+        <input id="file" type="file" accept=".xlsx,.xls,.csv" />
+        <button id="btnLoad" class="ghost">불러오기</button>
+        <button id="btnTemplate" class="secondary">템플릿 다운로드</button>
+      </div>
+      <div id="loadMsg" class="footer"></div>
+    </section>
+
+    <div class="tabs">
+      <div id="tab-train" class="tab active">단어 훈련 (영어→뜻 입력)</div>
+      <div id="tab-test" class="tab">단어 테스트 (10초/문항, 영어→뜻)</div>
+      <div id="tab-report" class="tab">학습 리포트</div>
+    </div>
+
+    <section class="grid" style="margin-top:12px">
+      <div>
+        <!-- TRAIN -->
+        <div id="view-train" class="panel">
+          <div class="row" style="justify-content:space-between">
+            <div class="muted">훈련 중: <span id="trainIndex">0</span>/<span id="totalCount">0</span></div>
+            <div class="row">
+              <button id="btnPrev" class="ghost">이전</button>
+              <button id="btnNext">다음</button>
+            </div>
+          </div>
+          <div class="progress" style="margin:10px 0 14px"><span id="trainProgress"></span></div>
+
+          <div class="card">
+            <div id="trainWord" class="word">파일을 먼저 불러오세요</div>
+            <div id="trainMeaning" class="meaning" style="display:none"></div>
+            <div id="trainHint" class="muted"></div>
+
+            <input id="trainAnswer" class="txt" type="text" placeholder="한글 뜻 입력" />
+            <div class="row" style="justify-content:center">
+              <button id="btnTrainCheck">채점</button>
+              <button id="btnShowMeaning" class="secondary">힌트: 뜻 보기</button>
+              <button id="btnHint2" class="ghost">영단어 글자 수</button>
+              <button id="btnHint3" class="ghost">예문</button>
+            </div>
+            <div id="trainJudge" class="muted"></div>
+          </div>
+        </div>
+
+        <!-- TEST -->
+        <div id="view-test" class="panel" style="display:none">
+          <div class="row" style="justify-content:space-between">
+            <div class="muted">문항: <span id="qNum">0</span>/<span id="qTotal">0</span></div>
+            <div class="timer">남은 시간: <span id="timer">10</span>s</div>
+          </div>
+          <div class="progress" style="margin:10px 0 14px"><span id="testProgress"></span></div>
+
+          <div class="card">
+            <div id="qPrompt" class="meaning">파일을 먼저 불러오세요</div>
+            <input id="answer" class="txt" type="text" placeholder="한글 뜻 입력"/>
+            <div class="row" style="justify-content:center">
+              <button id="btnSubmit">제출</button>
+              <button id="btnSkip" class="ghost">건너뛰기</button>
+            </div>
+            <div id="judge" class="muted"></div>
+          </div>
+
+          <div class="row" style="margin-top:10px;justify-content:space-between">
+            <div>
+              <button id="btnStartTest" class="secondary">테스트 시작 (랜덤 20문항)</button>
+              <button id="btnStartAll" class="secondary">전체로 테스트</button>
+            </div>
+            <div><span id="scoreBadge" class="pill">점수: 0</span></div>
+          </div>
+        </div>
+
+        <!-- REPORT -->
+        <div id="view-report" class="panel" style="display:none">
+          <h3 style="margin-top:0">주간 리포트 (로컬 저장)</h3>
+          <div id="reportSummary" class="muted">아직 데이터가 없습니다.</div>
+          <div style="margin-top:12px;overflow:auto">
+            <table id="reportTable" style="display:none">
+              <thead>
+                <tr><th>날짜</th><th>학습 단어 수</th><th>정답</th><th>오답</th><th>점수</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <aside>
+        <div class="panel">
+          <h3 style="margin-top:0">오늘의 목표</h3>
+          <div id="dailyGoal" class="muted">“<strong>이윤서</strong>, 오늘 30개 완주 어때?”</div>
+          <div class="row" style="margin-top:10px">
+            <input id="goalInput" type="number" min="5" max="200" value="30" class="txt" style="width:140px"/>
+            <button id="btnSetGoal" class="secondary">목표 설정</button>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top:12px">
+          <h3 style="margin-top:0">학습 팁</h3>
+          <ul style="margin:0 0 0 18px;line-height:1.6">
+            <li>“윤서야, <b>소리 내서</b> 읽고 <b>한 번 써보기</b>.”</li>
+            <li>힌트는 <b>훈련에서만</b>! 테스트에선 <b>집중</b>!</li>
+            <li><b>짧고 강하게</b> 10~15분, 한 세트 끝내기.</li>
+          </ul>
+        </div>
+      </aside>
+    </section>
+
+    <div class="footer">* 부정적 표현 없이, 건강한 동기부여 중심 UX.</div>
+  </div>
+
+<script>
+  // 상태
+  let words = []; // {word, meaning}
+  let trainIndex = 0;
+  let testQueue = []; let qIndex = 0; let score = 0; let timerId=null; const DURATION=10; let remain=DURATION; let wrongLog=[];
+  const $ = id => document.getElementById(id);
+
+  // 유틸
+  const norm = s => (s||"").toString().trim().toLowerCase();
+  function tokenizeKR(str){
+    return (str||'')
+      .replace(/[()\[\]"'`]/g,' ')
+      .split(/[\/,;·]|\s+/)
+      .map(s=>s.trim())
+      .filter(s=>s.length>=2);
+  }
+  function looseMatchKR(ans, target){
+    const variants = (target||'').split(/[\/,;]|\s*\|\s*/).map(v=>v.trim()).filter(Boolean);
+    const ansTokens = new Set(tokenizeKR(ans));
+    if(!ansTokens.size) return false;
+    let best = 0;
+    for(const v of variants){
+      const tgtTokens = new Set(tokenizeKR(v));
+      if(!tgtTokens.size) continue;
+      let inter = 0; tgtTokens.forEach(t=>{ if(ansTokens.has(t)) inter++; });
+      const jacc = inter / tgtTokens.size; if(jacc>best) best=jacc;
+      if(inter>=1 && tgtTokens.size<=2) best = Math.max(best, 0.6);
+      if(v && (ans.includes(v) || v.includes(ans))) best = Math.max(best, 0.7);
+    }
+    return best>=0.5; // 의미 절반 이상 겹치면 정답 처리
+  }
+
+  // 템플릿
+  $("btnTemplate").addEventListener('click',()=>{
+    const csv = 'word,meaning\napple,사과\nrapid,빠른; 신속한\nintend,의도하다\nprecise,정확한\nexpand,확장하다';
+    const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob); const a = document.createElement('a');
+    a.href=url; a.download='template_words.csv'; a.click(); URL.revokeObjectURL(url);
+  });
+
+  // 파일 불러오기
+  $("btnLoad").addEventListener('click', async ()=>{
+    const file = $("file").files?.[0]; if(!file){ alert('파일을 선택하세요 (.xlsx/.csv)'); return; }
+    try{
+      if(file.name.endsWith('.csv')){
+        const text = await file.text(); words = parseCSV(text);
+      }else{
+        const data = await file.arrayBuffer();
+        const wb = XLSX.read(data,{type:'array'}); const ws = wb.Sheets[wb.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(ws,{defval:'',raw:false});
+        words = json.map(row=>{ const keys=Object.keys(row); if(keys.length<2) return null; const w=row[keys[0]], m=row[keys[1]]; if(!w||!m) return null; return {word:String(w).trim(), meaning:String(m).trim()}; }).filter(Boolean);
+      }
+      if(!words.length) throw new Error('단어를 찾을 수 없습니다. 형식을 확인하세요.');
+      initAfterLoad();
+      $("loadMsg").textContent = `불러오기 완료: ${words.length}개 단어. 시작하자, 이윤서!`;
+    }catch(err){ $("loadMsg").textContent = '불러오기 실패: ' + err.message; }
+  });
+  function parseCSV(text){
+    const lines = text.split(/\r?\n/).filter(Boolean); const out=[]; let start=0;
+    if(/word/i.test(lines[0]) && /meaning|뜻|의미/i.test(lines[0])) start=1;
+    for(let i=start;i<lines.length;i++){
+      const row = lines[i].split(','); if(row.length<2) continue; const w=row[0].trim(); const m=row.slice(1).join(',').trim(); if(w&&m) out.push({word:w, meaning:m});
+    } return out;
+  }
+  function initAfterLoad(){
+    trainIndex=0; updateTrainCard(); $("totalCount").textContent=words.length; updateTrainProgress(); resetTest(); saveMeta();
+  }
+
+  // 훈련 화면
+  function updateTrainCard(){
+    if(!words.length){ $("trainWord").textContent='파일을 먼저 불러오세요'; $("trainMeaning").style.display='none'; $("trainHint").textContent=''; $("trainIndex").textContent='0'; return; }
+    if(trainIndex<0) trainIndex=0; if(trainIndex>=words.length) trainIndex=words.length-1; const item=words[trainIndex];
+    $("trainWord").textContent=item.word; $("trainMeaning").textContent=item.meaning; $("trainMeaning").style.display='none';
+    $("trainHint").textContent=`윤서 체크: 오늘의 집중 ${Math.round(((trainIndex+1)/words.length)*100)}%`;
+    $("trainIndex").textContent=(trainIndex+1).toString(); $("trainAnswer").value=''; $("trainJudge").textContent='';
+  }
+  function updateTrainProgress(){ const p=words.length?((trainIndex+1)/words.length*100):0; $("trainProgress").style.width=p+'%'; }
+  $("btnPrev").addEventListener('click',()=>{trainIndex--; updateTrainCard(); updateTrainProgress();});
+  $("btnNext").addEventListener('click',()=>{trainIndex++; updateTrainCard(); updateTrainProgress();});
+  $("btnShowMeaning").addEventListener('click',()=>{ if(!words.length) return; $("trainMeaning").style.display='block'; $("trainHint").textContent='힌트 사용: 뜻을 참고해 한국어로 입력해보자'; });
+  $("btnHint2").addEventListener('click',()=>{ if(!words.length) return; const w=words[trainIndex].word; $("trainHint").textContent=`영단어 글자 수: ${w.length}자`; });
+  $("btnHint3").addEventListener('click',()=>{ if(!words.length) return; const w=words[trainIndex].word; const ex = `Yoonseo focuses and remembers \"${w}\" today.`; $("trainHint").textContent=`예문: ${ex}`; });
+  $("btnTrainCheck").addEventListener('click',()=>{ if(!words.length) return; const item=words[trainIndex]; const val=$("trainAnswer").value; const ok=looseMatchKR(val,item.meaning); $("trainJudge").innerHTML = ok? `<span class="pill ok">좋아, 이윤서! 의미 일치</span>` : `<span class="pill err">조금 아쉬워. 정답 예: ${item.meaning}</span>`; });
+
+  // 테스트
+  function pickRandom(arr,n){ const a=[...arr]; for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]];} return a.slice(0,Math.min(n,a.length)); }
+  function resetTest(){ testQueue=[]; qIndex=0; score=0; wrongLog=[]; $("qNum").textContent='0'; $("qTotal").textContent='0'; $("scoreBadge").className='pill'; $("scoreBadge").textContent='점수: 0'; stopTimer(); $("timer").textContent=DURATION; $("answer").value=''; $("qPrompt").textContent=words.length? '테스트를 시작하세요':'파일을 먼저 불러오세요'; $("answer").placeholder='한글 뜻 입력'; updateTestProgress(); }
+  function startTest(mode){ if(!words.length){ alert('먼저 파일을 불러오세요'); return; } testQueue = (mode==='all')? [...words] : pickRandom(words,20); qIndex=0; score=0; wrongLog=[]; $("qTotal").textContent=testQueue.length; nextQuestion(); }
+  function nextQuestion(){ if(qIndex>=testQueue.length){ finishTest(); return; } const item=testQueue[qIndex]; $("qNum").textContent=(qIndex+1).toString(); $("qPrompt").textContent=`영어: ${item.word}`; $("answer").value=''; $("answer").placeholder='한글 뜻 입력'; $("answer").focus(); $("judge").innerHTML=''; remain=DURATION; updateTimerLabel(); startTimer(); updateTestProgress(); }
+  function updateTestProgress(){ const p=testQueue.length? (qIndex/testQueue.length*100):0; $("testProgress").style.width=p+'%'; }
+  function startTimer(){ stopTimer(); timerId=setInterval(()=>{ remain--; updateTimerLabel(); if(remain<=0){ stopTimer(); judgeAnswer(''); } },1000); }
+  function stopTimer(){ if(timerId){ clearInterval(timerId); timerId=null; } }
+  function updateTimerLabel(){ $("timer").textContent=remain; }
+  function judgeAnswer(input){ stopTimer(); const item=testQueue[qIndex]; const ok=looseMatchKR(input,item.meaning); if(ok){ score++; $("judge").innerHTML='<span class="pill ok">좋아, 이윤서! 의미 일치</span>'; } else { wrongLog.push({q:item.word,a:item.meaning,input}); $("judge").innerHTML=`<span class=\"pill err\">다시 도전! 정답 예: ${item.meaning}</span>`; } $("scoreBadge").className='pill ' + (ok? 'ok':''); $("scoreBadge").textContent=`점수: ${score}`; qIndex++; setTimeout(()=>{ nextQuestion(); },700); }
+  $("btnSubmit").addEventListener('click',()=>{ judgeAnswer($("answer").value); });
+  $("btnSkip").addEventListener('click',()=>{ judgeAnswer(''); });
+  $("btnStartTest").addEventListener('click',()=> startTest('rand'));
+  $("btnStartAll").addEventListener('click',()=> startTest('all'));
+
+  // 종료 및 리포트 저장
+  function finishTest(){ $("qPrompt").textContent='테스트 완료! 수고했어, 이윤서.'; $("answer").value=''; $("judge").innerHTML=''; $("qNum").textContent=testQueue.length.toString(); updateTestProgress(); const total=testQueue.length; const percent = total? Math.round(score/total*100):0; let msg=''; if(percent>=90) msg='완벽에 가깝다! 자신감 유지'; else if(percent>=70) msg='좋아! 오늘 조금만 더 밀어보자'; else msg='수고했어. 훈련 한 번 더 하고 마무리하자'; $("judge").innerHTML = `<div style="margin-top:8px">결과: <b>${score}/${total}</b> (${percent}%) - ${msg}</div>`; appendReport(total,score); saveMeta(); }
+
+  // 리포트
+  function appendReport(total, correct){ const today=new Date(); const date=today.toISOString().slice(0,10); const rec={date,total,correct,wrong:total-correct,score:Math.round(correct/total*100)}; const list=JSON.parse(localStorage.getItem('ys_reports')||'[]'); list.push(rec); localStorage.setItem('ys_reports',JSON.stringify(list)); renderReport(); }
+  function renderReport(){ const list=JSON.parse(localStorage.getItem('ys_reports')||'[]'); if(!list.length){ $("reportSummary").textContent='아직 데이터가 없습니다.'; $("reportTable").style.display='none'; return; } $("reportTable").style.display='table'; const tbody=$("reportTable").querySelector('tbody'); tbody.innerHTML=''; let totalWords=0,totalCorrect=0; list.forEach(r=>{ totalWords+=r.total; totalCorrect+=r.correct; const tr=document.createElement('tr'); tr.innerHTML=`<td>${r.date}</td><td>${r.total}</td><td>${r.correct}</td><td>${r.wrong}</td><td>${r.score}%</td>`; tbody.appendChild(tr); }); const rate= totalWords? Math.round(totalCorrect/totalWords*100):0; $("reportSummary").innerHTML=`누적: <b>${totalWords}</b>개 학습, 정답 <b>${totalCorrect}</b>개 (<b>${rate}%</b>) — 이 페이스 유지하자, <b>이윤서</b>!`; }
+  function saveMeta(){ localStorage.setItem('ys_words_count', String(words.length)); localStorage.setItem('ys_last_loaded', new Date().toISOString()); }
+
+  // 탭
+  function setTab(id){ const tabs=['train','test','report']; tabs.forEach(t=>{ $("tab-"+t).classList.toggle('active', t===id); $("view-"+t).style.display = (t===id)? 'block':'none'; }); if(id==='report') renderReport(); }
+  $("tab-train").addEventListener('click',()=>setTab('train'));
+  $("tab-test").addEventListener('click',()=>setTab('test'));
+  $("tab-report").addEventListener('click',()=>setTab('report'));
+  // 목표
+  $("btnSetGoal").addEventListener('click',()=>{ const v=parseInt($("goalInput").value||'30',10); localStorage.setItem('ys_goal', String(v)); $("dailyGoal").innerHTML=`“<strong>이윤서</strong>, 오늘 <b>${v}</b>개 완주하자.”`; });
+  (function init(){ const goal=localStorage.getItem('ys_goal'); if(goal){ $("goalInput").value=goal; $("dailyGoal").innerHTML=`“<strong>이윤서</strong>, 오늘 <b>${goal}</b>개 완주하자.”`; } renderReport(); })();
+</script>
+</body>
+</html>
