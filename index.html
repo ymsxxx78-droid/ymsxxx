@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>수능 영단어 훈련·테스트 — 이윤서 집중 모드</title>
+<!-- SheetJS for .xlsx parsing -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#111520; --accent:#4f8cff; --accent-2:#00d1b2; --text:#e9eefb; --muted:#9fb0d9; --danger:#ff5a7a; --ok:#35d07f;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Pretendard,Apple SD Gothic Neo,Malgun Gothic,sans-serif;
+    background:linear-gradient(135deg,#090c12 0%,#0b0e14 50%,#0f1320 100%); color:var(--text);
+  }
+  .container{max-width:1100px; margin:40px auto; padding:0 20px;}
+  .hero{
+    border:1px solid #1b2233; background:radial-gradient(1200px 500px at 20% -10%,rgba(79,140,255,.15),transparent 60%),
+                              radial-gradient(800px 400px at 100% 0,rgba(0,209,178,.12),transparent 60%), var(--panel);
+    padding:28px; border-radius:20px; box-shadow:0 10px 30px rgba(0,0,0,.25);
+  }
+  .title{font-weight:800; font-size:28px; letter-spacing:.3px; margin:0 0 6px}
+  .subtitle{color:var(--muted); margin:0 0 14px}
+  .cta{
+    display:flex; gap:12px; flex-wrap:wrap; margin-top:14px;
+  }
+  button, .ghost{
+    cursor:pointer; border:none; border-radius:14px; padding:12px 16px; font-weight:700; letter-spacing:.2px;
+    background:var(--accent); color:#fff; transition:transform .05s ease, filter .2s ease;
+  }
+  button:hover{filter:brightness(1.07)}
+  button:active{transform:translateY(1px)}
+  .ghost{background:transparent; border:1px solid #2a364f; color:var(--text)}
+  .accent2{background:var(--accent-2); color:#081217}
+  .danger{background:var(--danger)}
+  .ok{background:var(--ok); color:#062212}
+  .grid{display:grid; grid-template-columns:1fr; gap:16px; margin-top:20px}
+  @media(min-width:900px){ .grid{grid-template-columns:1.1fr .9fr} }
+  .card{background:var(--panel); border:1px solid #1b2233; border-radius:18px; padding:18px}
+  .card h3{margin:0 0 10px; font-size:18px}
+  input[type="text"], .input{
+    width:100%; background:#0c111b; color:var(--text); border:1px solid #243150; padding:12px 14px; border-radius:12px;
+    font-size:16px; outline:none;
+  }
+  input[type="file"]{width:100%}
+  .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+  .pill{display:inline-flex; align-items:center; gap:8px; background:#0c111b; border:1px solid #243150; color:var(--muted); padding:6px 10px; border-radius:999px; font-size:12px}
+  .hint{color:#cfe0ff; font-size:15px; background:#0c1422; border:1px dashed #2a3d67; padding:10px 12px; border-radius:12px; display:none; margin-top:8px}
+  .word{font-size:28px; font-weight:800; letter-spacing:.5px}
+  .status{display:flex; gap:10px; flex-wrap:wrap; align-items:center}
+  .badge{padding:6px 10px; border-radius:999px; font-size:12px; background:#0c111b; border:1px solid #2a3650; color:#b9c7ea}
+  .timer{font-variant-numeric:tabular-nums; font-weight:900; padding:8px 12px; border-radius:12px; background:#121a2b; border:1px solid #2a3650}
+  .result{margin-top:12px; font-weight:700}
+  .list{max-height:280px; overflow:auto; border:1px solid #1b2233; border-radius:12px}
+  table{width:100%; border-collapse:collapse; font-size:14px}
+  th,td{padding:10px 12px; border-bottom:1px solid #1b2233}
+  tr:last-child td{border-bottom:none}
+  .oktxt{color:var(--ok)} .ngtxt{color:var(--danger)} .muted{color:var(--muted)}
+  .divider{height:1px; background:#1b2233; margin:14px 0}
+  .foot{margin-top:28px; color:#8aa0cf; font-size:12px; text-align:center}
+</style>
+</head>
+<body>
+  <div class="container">
+    <section class="hero">
+      <h1 class="title">이윤서, 지금 집중해 — 수능 영단어 훈련·테스트</h1>
+      <p class="subtitle">파일 업로드 → 훈련 → 테스트(문항당 <b>10초</b>) · 의미 유사도 채점</p>
+      <div class="cta">
+        <button id="startTrainBtn">단어훈련 시작</button>
+        <button id="startTestBtn" class="accent2">단어테스트 시작(10초)</button>
+        <button id="resetBtn" class="ghost">초기화</button>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <span class="pill">포맷: 첫 열=영단어, 둘째 열=한글 뜻 (예: <b>apple</b> / <b>사과</b>)</span>
+        <span class="pill">CSV 또는 .xlsx 지원</span>
+        <span class="pill">유사도 채점(부분일치/철자근사)</span>
+      </div>
+    </section>
+
+    <section class="grid">
+      <!-- 좌: 업로드/데이터 미리보기 -->
+      <div class="card">
+        <h3>1) 단어세트 업로드</h3>
+        <input id="fileInput" type="file" accept=".xlsx,.csv" />
+        <div class="divider"></div>
+        <div class="row">
+          <div class="pill">현재 로딩된 항목: <span id="count">0</span>개</div>
+          <div class="pill">샘플 사용: <button id="loadSample" class="ghost">워밍업 15개</button></div>
+        </div>
+        <div class="list" style="margin-top:10px">
+          <table id="previewTbl">
+            <thead><tr><th style="width:40%">영어 단어</th><th>한글 뜻</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 우: 훈련/테스트 패널 -->
+      <div class="card">
+        <h3>2) 훈련 & 테스트</h3>
+        <div class="status">
+          <div class="badge">모드: <span id="modeLabel">대기</span></div>
+          <div class="badge">진행: <span id="progress">0 / 0</span></div>
+          <div class="timer" id="timer">10</div>
+        </div>
+
+        <div style="margin-top:12px">
+          <div class="muted" id="coach">이윤서, 지금부터는 집중 구간이다.</div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="word" id="word">단어가 여기에 표시됩니다</div>
+
+        <div id="hintBox" class="hint"></div>
+
+        <input id="answerInput" class="input" type="text" placeholder="한글 뜻을 입력하세요 (정확하지 않아도 의미가 맞으면 정답)"/>
+        <div class="row" style="margin-top:10px">
+          <button id="revealBtn" class="ghost">힌트 보기</button>
+          <button id="checkBtn">확인</button>
+          <button id="nextBtn" class="ghost">다음</button>
+        </div>
+
+        <div class="result" id="result"></div>
+
+        <div class="divider"></div>
+
+        <div class="row">
+          <div class="pill">정답: <span id="scoreOk">0</span></div>
+          <div class="pill">오답: <span id="scoreNg">0</span></div>
+          <div class="pill">정답률: <span id="accuracy">0%</span></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="foot">
+      © 2025 집중 학습 인터페이스 · “의미 유사도 채점” 활성화 · 부정적 단어 배제
+    </div>
+  </div>
+
+<script>
+/* ---------- 유틸(정규화/유사도) ---------- */
+// 한글/영문 정규화: 소문자, 공백/기호 제거, 자모 분리 최소화(간단 버전)
+function normalize(s){
+  if(!s) return "";
+  return s.toString()
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g,'')           // 공백 제거
+    .replace(/[~`!@#$%^&*()_+=\-\[\]{}\\|;:'",.<>/?]/g,''); // 기호 제거
+}
+
+// 레벤슈타인 거리
+function levenshtein(a,b){
+  a = normalize(a); b = normalize(b);
+  const m=a.length, n=b.length;
+  if(m===0) return n; if(n===0) return m;
+  const dp = Array.from({length:m+1}, ()=>Array(n+1).fill(0));
+  for(let i=0;i<=m;i++) dp[i][0]=i;
+  for(let j=0;j<=n;j++) dp[0][j]=j;
+  for(let i=1;i<=m;i++){
+    for(let j=1;j<=n;j++){
+      const cost = a[i-1]===b[j-1]?0:1;
+      dp[i][j]=Math.min(
+        dp[i-1][j]+1,      // 삭제
+        dp[i][j-1]+1,      // 삽입
+        dp[i-1][j-1]+cost  // 교체
+      );
+    }
+  }
+  return dp[m][n];
+}
+
+function similarity(a,b){
+  a=a||""; b=b||"";
+  const A=normalize(a), B=normalize(b);
+  if(!A || !B) return 0;
+  const dist = levenshtein(A,B);
+  const maxLen = Math.max(A.length,B.length);
+  return maxLen? (1 - dist/maxLen) : 0;
+}
+
+// 의미 허용 판정: 부분일치 or 유사도 >= 0.72
+function isAcceptable(input, target){
+  if(!input||!target) return false;
+
+  // 다중 정답 허용(예: "사과/애플, 과일")
+  const candidates = target.split(/[\/,]| 또는 | 혹은 /g).map(s=>s.trim()).filter(Boolean);
+
+  // 입력도 쉼표 등 구분 허용
+  const pieces = input.split(/[\/,]/g).map(s=>s.trim()).filter(Boolean);
+
+  const any = (arr,fn)=>arr.some(fn);
+
+  return any(candidates, cand=>{
+    // 1) 부분 포함(정규화 기준)
+    const nc = normalize(cand);
+    const okPartial = any(pieces, p=>{
+      const np = normalize(p);
+      return np && (nc.includes(np) || np.includes(nc));
+    });
+    if(okPartial) return true;
+
+    // 2) 유사도
+    const okSim = any(pieces, p=> similarity(p,cand) >= 0.72);
+    return okSim;
+  });
+}
+
+/* ---------- 상태 ---------- */
+let dataset = [];         // [{en, ko}]
+let order = [];           // 인덱스 셔플
+let idx = 0;              // 현재 인덱스
+let mode = "idle";        // idle | train | test
+let ok=0, ng=0;           // 점수
+let timerId=null, remain=10;
+
+/* ---------- DOM ---------- */
+const els = {
+  file: document.getElementById('fileInput'),
+  startTrain: document.getElementById('startTrainBtn'),
+  startTest: document.getElementById('startTestBtn'),
+  reset: document.getElementById('resetBtn'),
+  loadSample: document.getElementById('loadSample'),
+  count: document.getElementById('count'),
+  previewTbody: document.querySelector('#previewTbl tbody'),
+  modeLabel: document.getElementById('modeLabel'),
+  progress: document.getElementById('progress'),
+  word: document.getElementById('word'),
+  hintBox: document.getElementById('hintBox'),
+  answer: document.getElementById('answerInput'),
+  reveal: document.getElementById('revealBtn'),
+  check: document.getElementById('checkBtn'),
+  next: document.getElementById('nextBtn'),
+  result: document.getElementById('result'),
+  scoreOk: document.getElementById('scoreOk'),
+  scoreNg: document.getElementById('scoreNg'),
+  accuracy: document.getElementById('accuracy'),
+  timer: document.getElementById('timer'),
+  coach: document.getElementById('coach'),
+};
+
+/* ---------- 파일 파싱 ---------- */
+els.file.addEventListener('change', async (e)=>{
+  const file = e.target.files?.[0];
+  if(!file) return;
+
+  // CSV면 빠르게 처리
+  if(file.name.toLowerCase().endsWith('.csv')){
+    const text = await file.text();
+    const rows = text.split(/\r?\n/).map(r=>r.trim()).filter(Boolean);
+    dataset = rows.map(line=>{
+      const parts = line.split(',');
+      return {en:(parts[0]||"").trim(), ko:(parts[1]||"").trim()}
+    }).filter(r=>r.en && r.ko);
+    renderPreview(); resetState();
+    return;
+  }
+
+  // XLSX
+  const data = await file.arrayBuffer();
+  const wb = XLSX.read(data, {type:'array'});
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const json = XLSX.utils.sheet_to_json(ws, {header:1, defval:""});
+  dataset = json
+    .filter(row => row && row.length>=2)
+    .map(row => ({en:String(row[0]).trim(), ko:String(row[1]).trim()}))
+    .filter(r=>r.en && r.ko);
+  renderPreview(); resetState();
+});
+
+function renderPreview(){
+  els.previewTbody.innerHTML = '';
+  dataset.forEach((r,i)=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${escapeHtml(r.en)}</td><td>${escapeHtml(r.ko)}</td>`;
+    els.previewTbody.appendChild(tr);
+  });
+  els.count.textContent = dataset.length;
+}
+
+/* ---------- 샘플 ---------- */
+const SAMPLE = [
+  ["apple","사과"],["book","책"],["create","만들다/창조하다"],
+  ["increase","증가하다"],["reduce","줄이다/감소시키다"],
+  ["require","요구하다/필요로 하다"],["achieve","달성하다/이루다"],
+  ["consider","고려하다/숙고하다"],["determine","결정하다/규정하다"],
+  ["support","지지하다/지원하다"],["effort","노력"],
+  ["purpose","목적/의도"],["evidence","증거/근거"],["various","다양한"],
+  ["opportunity","기회"]
+];
+document.getElementById('loadSample').addEventListener('click', ()=>{
+  dataset = SAMPLE.map(([en,ko])=>({en,ko}));
+  renderPreview(); resetState();
+  els.coach.textContent = "샘플 세트 로드 완료. 이윤서, 준비됐으면 시작 버튼.";
+});
+
+/* ---------- 진행 컨트롤 ---------- */
+function resetState(){
+  ok=0; ng=0; idx=0; stopTimer();
+  order = Array.from(dataset.keys());
+  els.scoreOk.textContent = ok; els.scoreNg.textContent = ng;
+  els.accuracy.textContent = "0%";
+  els.progress.textContent = `0 / ${dataset.length}`;
+  els.modeLabel.textContent = "대기";
+  els.word.textContent = "단어가 여기에 표시됩니다";
+  els.hintBox.style.display="none"; els.hintBox.textContent="";
+  els.answer.value=""; els.result.textContent="";
+  els.timer.textContent = "10";
+}
+
+function shuffle(arr){
+  for(let i=arr.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [arr[i],arr[j]]=[arr[j],arr[i]];
+  }
+}
+
+function startTrain(){
+  if(dataset.length===0){ alert("먼저 단어세트를 업로드하세요."); return; }
+  resetState();
+  mode="train"; els.modeLabel.textContent="단어훈련";
+  shuffle(order); idx=0;
+  els.coach.textContent = "힌트를 활용해 의미를 정확히 떠올려 보자. 이윤서, 집중!";
+  nextItem(true);
+}
+
+function startTest(){
+  if(dataset.length===0){ alert("먼저 단어세트를 업로드하세요."); return; }
+  resetState();
+  mode="test"; els.modeLabel.textContent="단어테스트(10초)";
+  shuffle(order); idx=0;
+  els.coach.textContent = "문항당 10초. 의미가 맞으면 정답 처리.";
+  nextItem(true);
+}
+
+function nextItem(isStart=false){
+  if(idx>=order.length){
+    finish();
+    return;
+  }
+  const {en,ko} = dataset[order[idx]];
+  els.word.textContent = en;
+  els.hintBox.textContent = (mode==="train") ? `힌트(뜻): ${ko}` : "";
+  els.hintBox.style.display = (mode==="train") ? "block" : "none";
+  els.answer.value = "";
+  els.result.textContent = "";
+  els.progress.textContent = `${idx+1} / ${dataset.length}`;
+
+  if(mode==="test"){ startTimer(); } else { stopTimer(); els.timer.textContent="10"; }
+
+  // 포커스
+  setTimeout(()=>els.answer.focus(), 50);
+}
+
+function finish(){
+  stopTimer();
+  const total = ok+ng;
+  const acc = total? Math.round((ok/total)*100):0;
+  els.accuracy.textContent = acc+"%";
+  els.result.innerHTML = `<span class="oktxt">완료!</span> 총 ${total}문항 · 정답 ${ok} · 오답 ${ng} · 정답률 ${acc}%`;
+  els.coach.textContent = "좋다. 여기서 멈추지 말자. 한 번 더!";
+  mode="idle"; els.modeLabel.textContent="대기";
+}
+
+/* ---------- 타이머(테스트 전용) ---------- */
+function startTimer(){
+  stopTimer();
+  remain = 10;
+  els.timer.textContent = remain;
+  timerId = setInterval(()=>{
+    remain -= 1;
+    els.timer.textContent = remain;
+    if(remain<=0){
+      stopTimer();
+      autoCheck(false); // 시간초과 → 오답 처리
+    }
+  }, 1000);
+}
+function stopTimer(){ if(timerId){ clearInterval(timerId); timerId=null; }}
+
+/* ---------- 채점 ---------- */
+function doCheck(){
+  if(idx>=order.length) return;
+  const user = els.answer.value.trim();
+  const {ko} = dataset[order[idx]];
+  const correct = isAcceptable(user, ko);
+  if(correct){
+    ok++; els.result.innerHTML = `<span class="oktxt">정답</span> · 기준뜻: ${escapeHtml(ko)}`;
+  }else{
+    ng++; els.result.innerHTML = `<span class="ngtxt">오답</span> · 기준뜻: ${escapeHtml(ko)}`;
+  }
+  els.scoreOk.textContent = ok; els.scoreNg.textContent = ng;
+  const total = ok+ng;
+  const acc = total? Math.round((ok/total)*100):0;
+  els.accuracy.textContent = acc + "%";
+
+  if(mode==="test") stopTimer();
+}
+
+function autoCheck(correctIfAny){
+  // 시간 종료 시 자동 오답
+  if(correctIfAny){
+    doCheck();
+  }else{
+    const {ko} = dataset[order[idx]];
+    ng++; els.scoreNg.textContent = ng;
+    const total = ok+ng;
+    const acc = total? Math.round((ok/total)*100):0;
+    els.accuracy.textContent = acc + "%";
+    els.result.innerHTML = `<span class="ngtxt">시간 종료</span> · 기준뜻: ${escapeHtml(ko)}`;
+  }
+}
+
+/* ---------- 이벤트 ---------- */
+els.startTrain.addEventListener('click', startTrain);
+els.startTest.addEventListener('click', startTest);
+els.reset.addEventListener('click', resetState);
+
+els.reveal.addEventListener('click', ()=>{
+  if(idx>=order.length) return;
+  const {ko} = dataset[order[idx]];
+  els.hintBox.textContent = `힌트(뜻): ${ko}`;
+  els.hintBox.style.display="block";
+});
+
+els.check.addEventListener('click', ()=>{
+  doCheck();
+});
+
+els.next.addEventListener('click', ()=>{
+  if(mode==="test" && timerId){ // 체크 없이 넘기면 시간 계속 흐르므로 정리
+    stopTimer();
+    autoCheck(false); // 미답변은 시간 종료 처리와 동일하게
+  }
+  idx++;
+  nextItem();
+});
+
+els.answer.addEventListener('keydown', (e)=>{
+  if(e.key==='Enter'){
+    e.preventDefault();
+    doCheck();
+  }
+});
+
+/* ---------- 보조 ---------- */
+function escapeHtml(s){
+  return s.replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
+}
+
+// 초기 안내
+resetState();
+</script>
+</body>
+</html>
